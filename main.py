@@ -1,26 +1,31 @@
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.embeddings import HuggingFaceEmbeddings
-from langchain.vectorstores import Chroma
-from langchain.document_loaders import TextLoader
-from pdfminer.high_level import extract_text
+from utils.parse_pdf import parse_pdf
+from utils.chunking import chunk_book
+from utils.embedding import embed_and_store_chroma
+from utils.query import load_collection, query_book, ask_llm
 
-pdf_path = "name.pdf"
-text = extract_text(pdf_path)
+def main():
+    # Step 1: Parse PDF
+    data = parse_pdf("book.pdf", output_json_path="book.json")
+    if not data:
+        print("Parsing failed.")
+        return
 
-with open("book.txt", "w", encoding="utf-8") as f:
-    f.write(text)
+    # Step 2: Chunk
+    chunks = chunk_book("book.json")
 
-# Load book
-loader = TextLoader("book.txt")
-documents = loader.load()
+    # Step 3: Embed + Store in Chroma
+    embed_and_store_chroma(chunks, persist_dir="chroma_db", batch_size=16)
 
-# Chunk book into manageable pieces
-splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
-docs = splitter.split_documents(documents)
+    # # Step 4: Query Loop
+    # collection = load_collection("chroma_db")
+    # print("RAG system ready. Ask questions about the book.")
+    # while True:
+    #     q = input(">>> ")
+    #     if q.lower() in {"exit", "quit"}:
+    #         break
+    #     context = query_book(collection, q)
+    #     answer = ask_llm(q, context)
+    #     print("\nAnswer:\n", answer)
 
-# Create embeddings (you can use 'all-MiniLM-L6-v2' locally)
-embedding = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-
-# Store vectors in Chroma
-vectordb = Chroma.from_documents(docs, embedding, persist_directory="./book_chroma")
-vectordb.persist()
+if __name__ == "__main__":
+    main()

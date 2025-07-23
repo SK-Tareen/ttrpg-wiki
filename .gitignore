@@ -1,2 +1,6 @@
 .venv/
-name.pdf
+book.pdf
+__pycache__/
+.env
+chroma_db/
+book.json

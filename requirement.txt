@@ -1,6 +1,0 @@
-pdfminer.six
-langchain 
-chromadb 
-openai 
-tiktoken 
-sentence-transformers
