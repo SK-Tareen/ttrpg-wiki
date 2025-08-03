@@ -1,8 +1,5 @@
 pymupdf
 langchain
 numpy
-chromadb 
 sentence-transformers
 openai
-qdrant-client
-faiss
