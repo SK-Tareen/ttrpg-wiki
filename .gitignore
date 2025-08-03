@@ -1,4 +1,4 @@
-.venv/
+.venv310/
 book.pdf
 __pycache__/
 .env

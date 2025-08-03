@@ -1,6 +1,6 @@
 from utils.parse_pdf import parse_pdf
 from utils.chunking import chunk_book
-from utils.embedding import embed_and_store_chroma
+from utils.embedding import embed_and_store_faiss
 from utils.query import load_collection, query_book, ask_llm
 
 def main():
@@ -14,7 +14,7 @@ def main():
     chunks = chunk_book("book.json")
 
     # Step 3: Embed + Store in Chroma
-    embed_and_store_chroma(chunks, persist_dir="chroma_db", batch_size=16)
+    embed_and_store_faiss(chunks, persist_dir="chroma_db", batch_size=16)
 
     # # Step 4: Query Loop
     # collection = load_collection("chroma_db")
