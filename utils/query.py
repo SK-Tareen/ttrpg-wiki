@@ -4,23 +4,27 @@ from langchain_community.chat_models import ChatOpenAI
 from langchain.tools import BaseTool
 from typing import Optional, List, Dict, Any
 import os
+from dotenv import load_dotenv
 from utils.embedding import query_chroma_collection, get_collection_info
+
+# Load environment variables from .env file
+load_dotenv()
 
 class ChromaDBSearchTool(BaseTool):
     """Tool for searching ChromaDB collection and returning relevant chunks."""
     
     name: str = "chroma_search"
-    description: str = "Search the book content for relevant information. Use this tool to find specific content, chapters, or topics from the book."
+    description: str = "Search the book content for relevant information. Use this tool to find specific content, chapters, or topics from the book. This tool returns raw search results that you should use to formulate your answer."
     
     def __init__(self, collection):
         super().__init__()
-        self.collection = collection
+        self._collection = collection
     
     def _run(self, query: str) -> str:
         """Execute the search and return formatted results."""
         try:
             # Search for relevant chunks
-            results = query_chroma_collection(self.collection, query, n_results=5)
+            results = query_chroma_collection(self._collection, query, n_results=8)
             
             if not results or not results['documents'] or not results['documents'][0]:
                 return "No relevant content found for this query."
@@ -29,7 +33,7 @@ class ChromaDBSearchTool(BaseTool):
             metadatas = results['metadatas'][0]
             distances = results['distances'][0] if 'distances' in results else [0] * len(documents)
             
-            # Format the results
+            # Format the results with more context
             formatted_results = []
             for i, (doc, metadata, distance) in enumerate(zip(documents, metadatas, distances)):
                 relevance = 1 - distance if distance != 0 else "N/A"
@@ -37,11 +41,11 @@ class ChromaDBSearchTool(BaseTool):
                 chunk_id = metadata.get('chunk_id', f'chunk_{i}')
                 
                 formatted_results.append(
-                    f"Result {i+1} (Page {page}, Chunk {chunk_id}, Relevance: {relevance}):\n"
-                    f"{doc[:500]}{'...' if len(doc) > 500 else ''}"
+                    f"--- Content from Page {page} (Chunk {chunk_id}) ---\n"
+                    f"{doc}\n"
                 )
             
-            return "\n\n".join(formatted_results)
+            return "\n".join(formatted_results)
             
         except Exception as e:
             return f"Error searching collection: {str(e)}"
@@ -54,16 +58,16 @@ class BookSummaryTool(BaseTool):
     """Tool for getting book overview and summary information."""
     
     name: str = "book_summary"
-    description: str = "Get an overview or summary of the book content. Use this tool to understand the book's structure, main topics, or general content."
+    description: str = "Get an overview or summary of the book content. Use this tool to understand the book's structure, main topics, or general content. This tool returns raw content that you should use to formulate your answer."
     
     def __init__(self, collection):
         super().__init__()
-        self.collection = collection
+        self._collection = collection
     
     def _run(self, query: str = "book overview introduction content") -> str:
         """Get book summary information."""
         try:
-            results = query_chroma_collection(self.collection, query, n_results=8)
+            results = query_chroma_collection(self._collection, query, n_results=8)
             
             if not results or not results['documents'] or not results['documents'][0]:
                 return "Unable to retrieve book summary information."
@@ -71,13 +75,13 @@ class BookSummaryTool(BaseTool):
             documents = results['documents'][0]
             metadatas = results['metadatas'][0]
             
-            # Format summary results
+            # Format summary results with more context
             summary_parts = []
             for i, (doc, metadata) in enumerate(zip(documents, metadatas)):
                 page = metadata.get('page', 'Unknown')
-                summary_parts.append(f"Page {page}: {doc[:300]}{'...' if len(doc) > 300 else ''}")
+                summary_parts.append(f"--- Content from Page {page} ---\n{doc}\n")
             
-            return "\n\n".join(summary_parts)
+            return "\n".join(summary_parts)
             
         except Exception as e:
             return f"Error getting book summary: {str(e)}"
@@ -112,24 +116,30 @@ def create_llm_agent(collection, model_name="gpt-3.5-turbo", temperature=0.1):
     
     Args:
         collection: ChromaDB collection object
-        model_name (str): OpenAI model to use
+        model_name (str): Model to use (OpenRouter supported models)
         temperature (float): Model temperature for creativity control
     
     Returns:
         LangChain agent object
     """
     try:
-        # Check for OpenAI API key
-        if not os.getenv("OPENAI_API_KEY"):
-            print("⚠️  Warning: OPENAI_API_KEY not found. Please set it in your environment.")
-            print("   You can set it with: export OPENAI_API_KEY='your-key-here'")
+        # Check for OpenRouter API key
+        openrouter_key = os.getenv("OPENROUTER_API_KEY")
+        
+        if not openrouter_key:
+            print("⚠️  Warning: OPENROUTER_API_KEY not found!")
+            print("   Please set OPENROUTER_API_KEY in your .env file")
+            print("   You can get a free OpenRouter key from: https://openrouter.ai/")
             return None
         
-        # Initialize the LLM
+        # Initialize the LLM with OpenRouter
+        print("🔑 Using OpenRouter API")
         llm = ChatOpenAI(
             model_name=model_name,
             temperature=temperature,
-            verbose=False
+            verbose=False,
+            openai_api_key=openrouter_key,
+            openai_api_base="https://openrouter.ai/api/v1"
         )
         
         # Create tools
@@ -138,14 +148,26 @@ def create_llm_agent(collection, model_name="gpt-3.5-turbo", temperature=0.1):
         
         tools = [search_tool, summary_tool]
         
-        # Create the agent
+        # Create the agent with better configuration
         agent = initialize_agent(
             tools=tools,
             llm=llm,
             agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
-            verbose=True,
+            verbose=False,  # Reduce verbose output
             handle_parsing_errors=True,
-            max_iterations=5
+            max_iterations=3,  # Reduce iterations for faster responses
+            agent_kwargs={
+                "system_message": """You are a helpful AI assistant that has access to a book through search tools. 
+                
+                Your job is to:
+                1. Use the search tools to find relevant information from the book
+                2. Read and understand the content returned by the tools
+                3. Synthesize the information into a clear, comprehensive answer
+                4. Write your answer in your own words, not just repeat the search results
+                5. If you can't find specific information, say so clearly
+                
+                Always provide thoughtful, well-structured answers based on the book content you find."""
+            }
         )
         
         return agent
@@ -167,17 +189,17 @@ def ask_question_with_llm(agent, question: str) -> str:
     """
     try:
         if not agent:
-            return "❌ LLM agent not available. Please check your OpenAI API key and try again."
+            return "❌ LLM agent not available. Please check your OpenRouter API key and try again."
         
         # Add context about the book
         enhanced_question = f"""
-        You are a helpful assistant that has access to a book through search tools. 
-        Answer the following question based on the book content you can find:
+        Please answer the following question about the book content:
         
         Question: {question}
         
-        Use the available tools to search for relevant information and provide a comprehensive answer.
-        If you can't find specific information, say so clearly.
+        Important: Use the search tools to find relevant information, then synthesize it into a clear, 
+        comprehensive answer in your own words. Do not just list the search results - provide a 
+        thoughtful response that directly answers the question based on the book content you find.
         """
         
         response = agent.run(enhanced_question)
@@ -330,29 +352,15 @@ def get_book_summary(collection, n_results=10):
         return None
 
 if __name__ == "__main__":
-    # Test the enhanced query interface
-    print("🧪 Testing Enhanced LLM Query Interface...")
+    # Direct access to interactive query interface
+    print("🚀 LLM Query Interface")
+    print("=" * 30)
     
     # Try to load a collection
     collection = load_collection()
     
     if collection:
-        # Test LLM agent creation
-        print("\n🔧 Testing LLM agent creation...")
-        agent = create_llm_agent(collection)
-        
-        if agent:
-            print("✅ LLM agent created successfully!")
-            
-            # Test a simple question
-            print("\n🧪 Testing LLM question answering...")
-            test_answer = ask_question_with_llm(agent, "What is this book about?")
-            print(f"Test answer: {test_answer[:200]}...")
-        else:
-            print("⚠️  LLM agent creation failed")
-        
-        # Start interactive mode
-        print("\n🚀 Starting interactive LLM query interface...")
+        # Start interactive mode directly
         interactive_llm_query(collection)
     else:
         print("❌ No collection found. Please run the main pipeline first to create embeddings.")
