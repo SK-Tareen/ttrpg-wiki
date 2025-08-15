@@ -1,7 +1,7 @@
 pymupdf==1.26.3
 sentence-transformers==5.0.0
 chromadb==1.0.15
-langchain
-langchain-openai
-langchain-community
-openai
+langchain>=0.2.0
+langchain-community>=0.2.0
+openrouter
+python-dotenv==1.0.0
