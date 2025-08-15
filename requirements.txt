@@ -1,5 +1,1 @@
-pymupdf
-langchain
-numpy
-sentence-transformers
-openai
+pymupdf==1.26.3
