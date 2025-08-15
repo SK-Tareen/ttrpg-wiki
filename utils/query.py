@@ -197,9 +197,10 @@ def ask_question_with_llm(agent, question: str) -> str:
         
         Question: {question}
         
-        Important: Use the search tools to find relevant information, then synthesize it into a clear, 
-        comprehensive answer in your own words. Do not just list the search results - provide a 
-        thoughtful response that directly answers the question based on the book content you find.
+        Important: Use the search tools to find relevant information, then synthesize it into a clear answer in your own words. Do not just list the search results - provide a 
+        thoughtful response that directly answers the question based on the book content you find. 
+        Give a complete answer using the entire search results and not just the first result with simple one liners. 
+        Do not leave ambiguity in the answer, and if you think there is some, then ask for a more detailed question.
         """
         
         response = agent.run(enhanced_question)
